@@ -1,0 +1,18 @@
+[package]
+name = "embedded-fsm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jorge Andre Castro"]
+license = "GPL-2.0-or-later"
+description = "Machine à états finis (FSM) synchrone, ultra-légère et sans allocation (no_std) pour systèmes embarqués."
+readme = "README.md"
+documentation = "https://docs.rs/embedded-fsm"
+repository = "https://github.com/jorge-andre-castro/embedded-fsm"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
