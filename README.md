@@ -1,27 +1,41 @@
 # embedded-fsm
 
-[![Edition Rust](https://img.shields.io/badge/Rust-2021-orange?logo=rust)](https://doc.rust-lang.org/edition-guide/rust-2021/)
-![no_std](https://img.shields.io/badge/no__std-yes-success)
-[![Licence: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+<div align="center">
+  <img src="https://img.shields.io/badge/Rust-2021-orange?logo=rust" alt="Rust 2021" />
+  <img src="https://img.shields.io/badge/no__std-yes-success" alt="no_std" />
+  <img src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue" alt="GPL-2.0-or-later" />
+</div>
 
-Machine à états finis (FSM) synchrone, légère et sans allocation (`no_std`), conçue pour les systèmes embarqués.
+Machine à états finis (FSM) légère, synchrone et sans allocation pour les systèmes embarqués et les applications à ressources limitées.
+
+> `embedded-fsm` est conçu pour être déterministe, sûr et compatible `no_std`, sans dépendance d'allocateur et sans `unsafe`.
+
+## Pourquoi cette crate ?
+
+- Minimaliste : très peu de code, très peu de surface d'API.
+- Sans allocation : idéale pour les microcontrôleurs et les environnements stricts.
+- Sûre par conception : interdiction explicite de `unsafe`.
+- Déterministe : les transitions sont entièrement pilotées par votre logique métier.
+- Flexible : hooks `on_enter` et `on_exit` pour gérer les effets de bord d'état.
 
 ## Fonctionnalités
 
-- **Sans dépendance** : aucun allocateur requis.
-- **Sûre** : le crate interdit l'utilisation de `unsafe`.
-- **Déterministe** : les transitions sont définies par votre implémentation.
+- Gestion d'un état courant unique et explicite.
+- Transition déclenchée par un événement (`dispatch`).
+- Réinitialisation de la machine (`reset`).
+- Vérification rapide de l'état (`is_in_state`).
+- Support d'actions d'entrée et de sortie à chaque changement d'état.
 
 ## Installation
 
-Ajoutez `embedded-fsm` à la section `[dependencies]` de votre fichier `Cargo.toml` :
+Ajoutez le crate au fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
-embedded-fsm = "0.1"
+embedded-fsm = "0.2"
 ```
 
-## Exemple
+## Exemple rapide
 
 ```rust
 use embedded_fsm::{Fsm, StateMachine};
@@ -63,11 +77,27 @@ fn main() {
 
     fsm.dispatch(Evenement::BoutonPresse);
     assert_eq!(fsm.state(), Etat::Actif);
+
+    assert!(fsm.is_in_state(Etat::Actif));
 }
 ```
 
-`StateMachine` définit l'état initial et la logique de transition. `Fsm` conserve l'état courant ; `dispatch` lui transmet un événement et `reset` réinitialise la machine.
+## Modèle de conception
+
+`StateMachine` définit :
+
+- l'état initial,
+- la logique de transition,
+- les hooks optionnels `on_enter` et `on_exit`.
+
+`Fsm` conserve l'état courant et applique les transitions de façon déterministe.
+
+- `dispatch` : traite un événement et passe dans le nouvel état si nécessaire.
+- `is_in_state` : vérifie immédiatement l'état courant.
+- `reset` : réinitialise la machine à son état initial.
 
 ## Licence
 
-GPL-2.0-or-later. Copyright (C) 2026 Jorge Andre Castro.
+Ce projet est distribué sous la licence GPL-2.0-or-later.
+
+Copyright (C) 2026 Jorge Andre Castro.
