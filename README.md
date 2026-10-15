@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <strong>FSM synchrone, ultra légère et sans allocation pour systèmes embarqués.</strong>
+  <strong>FSM synchrone, ultra légère et sans allocation pour systèmes embarqués critiques.</strong>
 </div>
 
 <div align="center">
@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/docs-rs-blue?logo=rust" alt="Docs.rs" />
 </div>
 
-> `embedded-fsm` est conçu pour être déterministe, sûr et compatible `no_std`, sans dépendance d'allocateur et sans `unsafe`.
+> `embedded-fsm` est conçu pour être déterministe, sûr, compatible `no_std` et orienté conformité ISO, sans dépendance d'allocateur et sans `unsafe`.
 
 ## ✨ Pourquoi cette crate ?
 
@@ -21,14 +21,15 @@
 - 🧠 Déterministe : chaque transition suit une logique explicite et reproductible.
 - 🛡️ Sûre par conception : interdiction explicite de `unsafe`.
 - ♻️ Sans allocation : compatible avec les environnements les plus stricts.
-- 🔌 Flexible : hooks `on_enter` et `on_exit`, accès direct à la machine interne, et logique de transition centralisée.
+- 🔌 Flexible et Rigoureuse : gestion explicite des erreurs de transition (`TransitionError`), hooks `on_enter`/`on_exit`, suivi du nombre de transitions et accès direct à la machine interne.
 
 ## 🔧 Fonctionnalités
 
 - État courant unique et explicite.
-- Transition déclenchée par un événement via `dispatch`.
+- Transition sécurisée déclenchée par un événement via `dispatch` (retournant un `Result`).
 - Réinitialisation de la machine avec `reset`.
 - Vérification rapide de l'état avec `is_in_state`.
+- Suivi du nombre total de transitions réussies avec `transition_count`.
 - Hooks d'entrée/sortie pour chaque changement d'état.
 - Accès sécurisé à la machine interne via `machine()` et `machine_mut()`.
 
@@ -38,13 +39,14 @@ Ajoutez le crate au fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
-embedded-fsm = "0.3"
-```
+embedded-fsm = "0.5"
+```     
 
 ## 🚀 Exemple rapide
 
 ```rust
-use embedded_fsm::{Fsm, StateMachine};
+
+use embedded_fsm::{Fsm, StateMachine, TransitionError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Etat {
@@ -65,19 +67,20 @@ struct MaMachine {
 impl StateMachine for MaMachine {
     type State = Etat;
     type Event = Evenement;
+    type Action = ();
 
     fn initial_state() -> Self::State {
         Etat::Veille
     }
 
-    fn step(&mut self, current: Self::State, event: Self::Event) -> Self::State {
+    fn step(&mut self, current: Self::State, event: Self::Event) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
         match (current, event) {
             (Etat::Veille, Evenement::BoutonPresse) => {
                 self.compteur_activations += 1;
-                Etat::Actif
+                Ok((Etat::Actif, None))
             }
-            (Etat::Actif, Evenement::Timeout) => Etat::Veille,
-            _ => current,
+            (Etat::Actif, Evenement::Timeout) => Ok((Etat::Veille, None)),
+            _ => Err(TransitionError::InvalidTransition),
         }
     }
 }
@@ -87,33 +90,44 @@ fn main() {
     let mut fsm = Fsm::new(machine);
 
     assert_eq!(fsm.state(), Etat::Veille);
+    assert_eq!(fsm.transition_count(), 0);
 
-    fsm.dispatch(Evenement::BoutonPresse);
+    assert!(fsm.dispatch(Evenement::BoutonPresse).is_ok());
     assert_eq!(fsm.state(), Etat::Actif);
     assert!(fsm.is_in_state(Etat::Actif));
+    assert_eq!(fsm.transition_count(), 1);
     assert_eq!(fsm.machine().compteur_activations, 1);
+
+    // Rejet explicite d'une transition invalide
+    assert_eq!(fsm.dispatch(Evenement::BoutonPresse), Err(TransitionError::InvalidTransition));
 }
+
 ```
 
 ## 🧩 Modèle de conception
 
 `StateMachine` définit :
 
-- l'état initial,
-- la logique de transition,
-- les hooks optionnels `on_enter` et `on_exit`.
+* L'état initial (`initial_state`).
+* La logique de transition avec gestion explicite des erreurs (`TransitionError`).
+* Les hooks optionnels de cycle de vie (`on_enter` et `on_exit`).
 
-`Fsm` conserve l'état courant et applique les transitions de façon déterministe :
+`Fsm` conserve l'état courant et applique les transitions de façon strictement déterministe :
 
-- `dispatch` : traite un événement et passe dans un nouvel état si nécessaire,
-- `is_in_state` : vérifie immédiatement l'état courant,
-- `machine` / `machine_mut` : accèdent aux données internes de la machine,
-- `reset` : réinitialise la machine à son état initial.
+* `dispatch` : traite un événement de manière sécurisée et retourne un `Result`.
+* `is_in_state` : vérifie immédiatement l'état courant.
+* `transition_count` : retourne le nombre total de transitions effectuées.
+* `machine` / `machine_mut` : accèdent aux données internes de la machine.
+* `reset` : réinitialise la machine à son état initial.
+
+---
 
 ## 📚 Documentation
 
-- Documentation Rust : https://docs.rs/embedded-fsm
-- Dépôt GitHub : https://github.com/jorgeandrecastro/embedded-fsm
+* **Documentation Rust** : [https://docs.rs/embedded-fsm](https://docs.rs/embedded-fsm)
+* **Dépôt GitHub** : [https://github.com/jorgeandrecastro/embedded-fsm](https://github.com/jorgeandrecastro/embedded-fsm)
+
+---
 
 ## ⚖️ Licence
 

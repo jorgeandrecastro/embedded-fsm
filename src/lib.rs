@@ -8,12 +8,12 @@
 //! # embedded-fsm
 //!
 //! Machine à états finis (FSM) ultra-légère, synchrone et sans allocation (`no_std`)
-//! pour systèmes embarqués.
+//! pour systèmes embarqués critiques (conformité ISO).
 //!
 //! Zéro dépendance, sans `unsafe`, conçue pour des transitions déterministes.
 //!
 //! ```rust
-//! use embedded_fsm::{StateMachine, Fsm};
+//! use embedded_fsm::{StateMachine, Fsm, TransitionError};
 //!
 //! #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 //! enum Etat { Veille, Actif }
@@ -32,11 +32,11 @@
 //!         Etat::Veille
 //!     }
 //!
-//!     fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>) {
+//!     fn step(&mut self, current: Self::State, event: Self::Event) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
 //!         match (current, event) {
-//!             (Etat::Veille, Evenement::BoutonPressé) => (Etat::Actif, None),
-//!             (Etat::Actif, Evenement::Timeout) => (Etat::Veille, None),
-//!             _ => (current, None), // Reste dans l'état courant par défaut
+//!             (Etat::Veille, Evenement::BoutonPressé) => Ok((Etat::Actif, None)),
+//!             (Etat::Actif, Evenement::Timeout) => Ok((Etat::Veille, None)),
+//!             _ => Err(TransitionError::InvalidTransition),
 //!         }
 //!     }
 //! }
@@ -44,8 +44,8 @@
 //! let mut fsm = Fsm::new(MaMachine);
 //! assert_eq!(fsm.state(), Etat::Veille);
 //! assert!(fsm.is_in_state(Etat::Veille));
-//! 
-//! fsm.dispatch(Evenement::BoutonPressé);
+//!
+//! assert!(fsm.dispatch(Evenement::BoutonPressé).is_ok());
 //! assert_eq!(fsm.state(), Etat::Actif);
 //! assert!(fsm.is_in_state(Etat::Actif));
 //! assert_eq!(fsm.transition_count(), 1);
@@ -54,6 +54,13 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+/// Erreurs possibles lors d'une tentative de transition de la machine à états.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransitionError {
+    /// La transition demandée n'est pas autorisée par la logique métier.
+    InvalidTransition,
+}
 
 /// Trait définissant le comportement d'une machine à états finis.
 pub trait StateMachine {
@@ -68,8 +75,12 @@ pub trait StateMachine {
     /// Retourne l'état initial de la machine.
     fn initial_state() -> Self::State;
 
-    /// Calcule le nouvel état et l'action optionnelle associée.
-    fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>);
+    /// Calcule le nouvel état et l'action optionnelle associée, ou retourne une erreur.
+    fn step(
+        &mut self,
+        current: Self::State,
+        event: Self::Event,
+    ) -> Result<(Self::State, Option<Self::Action>), TransitionError>;
 
     /// Action exécutée lors de l'entrée dans un nouvel état.
     fn on_enter(&mut self, _state: Self::State) {}
@@ -89,20 +100,6 @@ impl<M: StateMachine> Fsm<M> {
     /// Retourne l'état actuel de la machine.
     pub fn state(&self) -> M::State {
         self.state
-    }
-
-    /// Envoie un événement, calcule le nouvel état, et gère les hooks
-    /// `on_exit` et `on_enter` si l'état change effectivement.
-    pub fn dispatch(&mut self, event: M::Event) -> Option<M::Action> {
-        let (next_state, action) = self.machine.step(self.state, event);
-        if next_state != self.state {
-            let old_state = self.state;
-            self.machine.on_exit(old_state);   
-            self.state = next_state;
-            self.machine.on_enter(self.state); 
-            self.transition_count += 1;
-        }
-        action
     }
 
     /// Réinitialise la machine à son état initial en déclenchant
@@ -125,11 +122,11 @@ impl<M: StateMachine> Fsm<M> {
     /// et déclenche le hook d'entrée correspondant.
     pub fn new(mut machine: M) -> Self {
         let state = M::initial_state();
-        machine.on_enter(state); 
-        Self { 
-            state, 
-            machine, 
-            transition_count: 0 
+        machine.on_enter(state);
+        Self {
+            state,
+            machine,
+            transition_count: 0,
         }
     }
 
@@ -147,6 +144,19 @@ impl<M: StateMachine> Fsm<M> {
     pub fn transition_count(&self) -> u32 {
         self.transition_count
     }
+
+    /// Envoie un événement, calcule le nouvel état de manière sécurisée et gère les hooks.
+    pub fn dispatch(&mut self, event: M::Event) -> Result<Option<M::Action>, TransitionError> {
+        let (next_state, action) = self.machine.step(self.state, event)?;
+        if next_state != self.state {
+            let old_state = self.state;
+            self.machine.on_exit(old_state);
+            self.state = next_state;
+            self.machine.on_enter(self.state);
+            self.transition_count += 1;
+        }
+        Ok(action)
+    }
 }
 
 #[cfg(test)]
@@ -162,6 +172,7 @@ mod tests {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum TestEvent {
         Toggle,
+        InvalidEvent,
     }
 
     struct TestMachine;
@@ -175,10 +186,15 @@ mod tests {
             TestState::Off
         }
 
-        fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>) {
+        fn step(
+            &mut self,
+            current: Self::State,
+            event: Self::Event,
+        ) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
             match (current, event) {
-                (TestState::Off, TestEvent::Toggle) => (TestState::On, None),
-                (TestState::On, TestEvent::Toggle) => (TestState::Off, None),
+                (TestState::Off, TestEvent::Toggle) => Ok((TestState::On, None)),
+                (TestState::On, TestEvent::Toggle) => Ok((TestState::Off, None)),
+                _ => Err(TransitionError::InvalidTransition),
             }
         }
     }
@@ -197,10 +213,15 @@ mod tests {
             TestState::Off
         }
 
-        fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>) {
+        fn step(
+            &mut self,
+            current: Self::State,
+            event: Self::Event,
+        ) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
             match (current, event) {
-                (TestState::Off, TestEvent::Toggle) => (TestState::On, None),
-                (TestState::On, TestEvent::Toggle) => (TestState::Off, None),
+                (TestState::Off, TestEvent::Toggle) => Ok((TestState::On, None)),
+                (TestState::On, TestEvent::Toggle) => Ok((TestState::Off, None)),
+                _ => Err(TransitionError::InvalidTransition),
             }
         }
 
@@ -219,13 +240,16 @@ mod tests {
         assert_eq!(fsm.state(), TestState::Off);
         assert_eq!(fsm.transition_count(), 0);
 
-        fsm.dispatch(TestEvent::Toggle);
+        assert!(fsm.dispatch(TestEvent::Toggle).is_ok());
         assert_eq!(fsm.state(), TestState::On);
         assert_eq!(fsm.transition_count(), 1);
 
-        fsm.dispatch(TestEvent::Toggle);
-        assert_eq!(fsm.state(), TestState::Off);
-        assert_eq!(fsm.transition_count(), 2);
+        // Vérification du rejet explicite de l'événement invalide
+        assert_eq!(
+            fsm.dispatch(TestEvent::InvalidEvent),
+            Err(TransitionError::InvalidTransition)
+        );
+        assert_eq!(fsm.state(), TestState::On);
     }
 
     #[test]
@@ -234,7 +258,7 @@ mod tests {
         assert!(fsm.is_in_state(TestState::Off));
         assert!(!fsm.is_in_state(TestState::On));
 
-        fsm.dispatch(TestEvent::Toggle);
+        let _ = fsm.dispatch(TestEvent::Toggle);
         assert!(fsm.is_in_state(TestState::On));
     }
 
@@ -249,12 +273,12 @@ mod tests {
         assert_eq!(fsm.machine().enter_count, 1);
         assert_eq!(fsm.machine().exit_count, 0);
 
-        fsm.dispatch(TestEvent::Toggle);
+        let _ = fsm.dispatch(TestEvent::Toggle);
         assert_eq!(fsm.state(), TestState::On);
         assert_eq!(fsm.machine().enter_count, 2);
         assert_eq!(fsm.machine().exit_count, 1);
 
-        fsm.dispatch(TestEvent::Toggle);
+        let _ = fsm.dispatch(TestEvent::Toggle);
         assert_eq!(fsm.state(), TestState::Off);
         assert_eq!(fsm.machine().enter_count, 3);
         assert_eq!(fsm.machine().exit_count, 2);
