@@ -26,16 +26,17 @@
 //! impl StateMachine for MaMachine {
 //!     type State = Etat;
 //!     type Event = Evenement;
+//!     type Action = ();
 //!
 //!     fn initial_state() -> Self::State {
 //!         Etat::Veille
 //!     }
 //!
-//!     fn step(&mut self, current: Self::State, event: Self::Event) -> Self::State {
+//!     fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>) {
 //!         match (current, event) {
-//!             (Etat::Veille, Evenement::BoutonPressé) => Etat::Actif,
-//!             (Etat::Actif, Evenement::Timeout) => Etat::Veille,
-//!             _ => current, // Reste dans l'état courant par défaut
+//!             (Etat::Veille, Evenement::BoutonPressé) => (Etat::Actif, None),
+//!             (Etat::Actif, Evenement::Timeout) => (Etat::Veille, None),
+//!             _ => (current, None), // Reste dans l'état courant par défaut
 //!         }
 //!     }
 //! }
@@ -47,6 +48,7 @@
 //! fsm.dispatch(Evenement::BoutonPressé);
 //! assert_eq!(fsm.state(), Etat::Actif);
 //! assert!(fsm.is_in_state(Etat::Actif));
+//! assert_eq!(fsm.transition_count(), 1);
 //! ```
 
 #![no_std]
@@ -60,11 +62,14 @@ pub trait StateMachine {
     /// Le type représentant les événements déclenchant les transitions.
     type Event;
 
+    /// Type d'action optionnelle retournée lors d'une transition.
+    type Action;
+
     /// Retourne l'état initial de la machine.
     fn initial_state() -> Self::State;
 
-    /// Calcule le nouvel état en fonction de l'état courant et de l'événement reçu.
-    fn step(&mut self, current: Self::State, event: Self::Event) -> Self::State;
+    /// Calcule le nouvel état et l'action optionnelle associée.
+    fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>);
 
     /// Action exécutée lors de l'entrée dans un nouvel état.
     fn on_enter(&mut self, _state: Self::State) {}
@@ -77,26 +82,27 @@ pub trait StateMachine {
 pub struct Fsm<M: StateMachine> {
     state: M::State,
     machine: M,
+    transition_count: u32,
 }
 
 impl<M: StateMachine> Fsm<M> {
-   
     /// Retourne l'état actuel de la machine.
     pub fn state(&self) -> M::State {
         self.state
     }
 
-
     /// Envoie un événement, calcule le nouvel état, et gère les hooks
     /// `on_exit` et `on_enter` si l'état change effectivement.
-    pub fn dispatch(&mut self, event: M::Event) {
-        let next_state = self.machine.step(self.state, event);
+    pub fn dispatch(&mut self, event: M::Event) -> Option<M::Action> {
+        let (next_state, action) = self.machine.step(self.state, event);
         if next_state != self.state {
             let old_state = self.state;
-            self.machine.on_exit(old_state);   // Sortie de l'ancien état
+            self.machine.on_exit(old_state);   
             self.state = next_state;
-            self.machine.on_enter(self.state); // Entrée dans le nouvel état
+            self.machine.on_enter(self.state); 
+            self.transition_count += 1;
         }
+        action
     }
 
     /// Réinitialise la machine à son état initial en déclenchant
@@ -119,9 +125,14 @@ impl<M: StateMachine> Fsm<M> {
     /// et déclenche le hook d'entrée correspondant.
     pub fn new(mut machine: M) -> Self {
         let state = M::initial_state();
-        machine.on_enter(state); // Notifie l'entrée dans l'état initial
-        Self { state, machine }
+        machine.on_enter(state); 
+        Self { 
+            state, 
+            machine, 
+            transition_count: 0 
+        }
     }
+
     /// Retourne une référence mutable vers la machine interne.
     pub fn machine_mut(&mut self) -> &mut M {
         &mut self.machine
@@ -130,6 +141,11 @@ impl<M: StateMachine> Fsm<M> {
     /// Retourne une référence immuable vers la machine interne.
     pub fn machine(&self) -> &M {
         &self.machine
+    }
+
+    /// Retourne le nombre total de transitions d'état réussies.
+    pub fn transition_count(&self) -> u32 {
+        self.transition_count
     }
 }
 
@@ -153,15 +169,16 @@ mod tests {
     impl StateMachine for TestMachine {
         type State = TestState;
         type Event = TestEvent;
+        type Action = ();
 
         fn initial_state() -> Self::State {
             TestState::Off
         }
 
-        fn step(&mut self, current: Self::State, event: Self::Event) -> Self::State {
+        fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>) {
             match (current, event) {
-                (TestState::Off, TestEvent::Toggle) => TestState::On,
-                (TestState::On, TestEvent::Toggle) => TestState::Off,
+                (TestState::Off, TestEvent::Toggle) => (TestState::On, None),
+                (TestState::On, TestEvent::Toggle) => (TestState::Off, None),
             }
         }
     }
@@ -174,15 +191,16 @@ mod tests {
     impl StateMachine for TestMachineWithHooks {
         type State = TestState;
         type Event = TestEvent;
+        type Action = ();
 
         fn initial_state() -> Self::State {
             TestState::Off
         }
 
-        fn step(&mut self, current: Self::State, event: Self::Event) -> Self::State {
+        fn step(&mut self, current: Self::State, event: Self::Event) -> (Self::State, Option<Self::Action>) {
             match (current, event) {
-                (TestState::Off, TestEvent::Toggle) => TestState::On,
-                (TestState::On, TestEvent::Toggle) => TestState::Off,
+                (TestState::Off, TestEvent::Toggle) => (TestState::On, None),
+                (TestState::On, TestEvent::Toggle) => (TestState::Off, None),
             }
         }
 
@@ -199,12 +217,15 @@ mod tests {
     fn test_fsm_transitions() {
         let mut fsm = Fsm::new(TestMachine);
         assert_eq!(fsm.state(), TestState::Off);
+        assert_eq!(fsm.transition_count(), 0);
 
         fsm.dispatch(TestEvent::Toggle);
         assert_eq!(fsm.state(), TestState::On);
+        assert_eq!(fsm.transition_count(), 1);
 
         fsm.dispatch(TestEvent::Toggle);
         assert_eq!(fsm.state(), TestState::Off);
+        assert_eq!(fsm.transition_count(), 2);
     }
 
     #[test]
@@ -225,17 +246,17 @@ mod tests {
         };
         let mut fsm = Fsm::new(machine);
 
-        assert_eq!(fsm.machine.enter_count, 1);
-        assert_eq!(fsm.machine.exit_count, 0);
+        assert_eq!(fsm.machine().enter_count, 1);
+        assert_eq!(fsm.machine().exit_count, 0);
 
         fsm.dispatch(TestEvent::Toggle);
         assert_eq!(fsm.state(), TestState::On);
-        assert_eq!(fsm.machine.enter_count, 2);
-        assert_eq!(fsm.machine.exit_count, 1);
+        assert_eq!(fsm.machine().enter_count, 2);
+        assert_eq!(fsm.machine().exit_count, 1);
 
         fsm.dispatch(TestEvent::Toggle);
         assert_eq!(fsm.state(), TestState::Off);
-        assert_eq!(fsm.machine.enter_count, 3);
-        assert_eq!(fsm.machine.exit_count, 2);
+        assert_eq!(fsm.machine().enter_count, 3);
+        assert_eq!(fsm.machine().exit_count, 2);
     }
 }

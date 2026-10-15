@@ -1,13 +1,17 @@
-# embedded-fsm
-
 <div align="center">
-  <img src="https://img.shields.io/badge/Rust-2024-orange?logo=rust" alt="Rust 2024" />
-  <img src="https://img.shields.io/badge/no__std-yes-success" alt="no_std" />
-  <img src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue" alt="GPL-2.0-or-later" />
-  <img src="https://img.shields.io/badge/docs-rs-blue?logo=rust" alt="documentation" />
+  <h1>embedded-fsm</h1>
 </div>
 
-Machine à états finis (FSM) légère, synchrone et sans allocation pour les systèmes embarqués et les applications à ressources limitées.
+<div align="center">
+  <strong>FSM synchrone, ultra légère et sans allocation pour systèmes embarqués.</strong>
+</div>
+
+<div align="center">
+  <img src="https://img.shields.io/badge/Rust-2021-orange?logo=rust" alt="Rust 2021" />
+  <img src="https://img.shields.io/badge/no__std-yes-success" alt="no_std" />
+  <img src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue" alt="GPL-2.0-or-later" />
+  <img src="https://img.shields.io/badge/docs-rs-blue?logo=rust" alt="Docs.rs" />
+</div>
 
 > `embedded-fsm` est conçu pour être déterministe, sûr et compatible `no_std`, sans dépendance d'allocateur et sans `unsafe`.
 
@@ -17,7 +21,7 @@ Machine à états finis (FSM) légère, synchrone et sans allocation pour les sy
 - 🧠 Déterministe : chaque transition suit une logique explicite et reproductible.
 - 🛡️ Sûre par conception : interdiction explicite de `unsafe`.
 - ♻️ Sans allocation : compatible avec les environnements les plus stricts.
-- 🔌 Flexible : hooks `on_enter` et `on_exit`, accès à la machine interne, gestion simple des effets de bord.
+- 🔌 Flexible : hooks `on_enter` et `on_exit`, accès direct à la machine interne, et logique de transition centralisée.
 
 ## 🔧 Fonctionnalités
 
@@ -30,7 +34,7 @@ Machine à états finis (FSM) légère, synchrone et sans allocation pour les sy
 
 ## 📦 Installation
 
-Ajoutez le crate dans votre fichier `Cargo.toml` :
+Ajoutez le crate au fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
