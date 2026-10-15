@@ -7,7 +7,7 @@ license = "GPL-2.0-or-later"
 description = "Machine à états finis (FSM) synchrone, ultra-légère et sans allocation (no_std) pour systèmes embarqués."
 readme = "README.md"
 documentation = "https://docs.rs/embedded-fsm"
-repository = "https://github.com/jorge-andrecastro/embedded-fsm"
+repository = "https://github.com/jorgeandrecastro/embedded-fsm"
 
 [dependencies]
 
