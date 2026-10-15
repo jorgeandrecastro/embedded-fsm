@@ -66,8 +66,9 @@ pub enum TransitionError {
 pub trait StateMachine {
     /// Le type représentant les différents états (généralement un `enum`).
     type State: Copy + PartialEq;
+
     /// Le type représentant les événements déclenchant les transitions.
-    type Event;
+    type Event: Clone;
 
     /// Type d'action optionnelle retournée lors d'une transition.
     type Action;
@@ -87,6 +88,9 @@ pub trait StateMachine {
 
     /// Action exécutée lors de la sortie d'un ancien état.
     fn on_exit(&mut self, _state: Self::State) {}
+
+    /// Hook optionnel appelé à chaque transition réussie pour la traçabilité.
+    fn on_transition(&mut self, _from: Self::State, _event: &Self::Event, _to: Self::State) {}
 }
 
 /// Gestionnaire générique de FSM (zéro allocation, zéro coût d'abstraction).
@@ -146,7 +150,12 @@ impl<M: StateMachine> Fsm<M> {
     }
 
     /// Envoie un événement, calcule le nouvel état de manière sécurisée et gère les hooks.
-    pub fn dispatch(&mut self, event: M::Event) -> Result<Option<M::Action>, TransitionError> {
+    #[must_use = "Le résultat de la transition doit être vérifié pour garantir la sécurité du système"]
+    pub fn dispatch(&mut self, event: M::Event) -> Result<Option<M::Action>, TransitionError>
+    where
+        M::Event: Clone, // <--- On exige Clone pour pouvoir le réutiliser dans on_transition
+    {
+        let event_clone = event.clone(); // <--- On clone l'événement avant qu'il ne soit déplacé
         let (next_state, action) = self.machine.step(self.state, event)?;
         if next_state != self.state {
             let old_state = self.state;
@@ -154,6 +163,10 @@ impl<M: StateMachine> Fsm<M> {
             self.state = next_state;
             self.machine.on_enter(self.state);
             self.transition_count += 1;
+
+            // On utilise la copie pour la traçabilité
+            self.machine
+                .on_transition(old_state, &event_clone, self.state);
         }
         Ok(action)
     }

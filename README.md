@@ -21,16 +21,16 @@
 - 🧠 Déterministe : chaque transition suit une logique explicite et reproductible.
 - 🛡️ Sûre par conception : interdiction explicite de `unsafe`.
 - ♻️ Sans allocation : compatible avec les environnements les plus stricts.
-- 🔌 Flexible et Rigoureuse : gestion explicite des erreurs de transition (`TransitionError`), hooks `on_enter`/`on_exit`, suivi du nombre de transitions et accès direct à la machine interne.
+- 🔌 Flexible et Rigoureuse : gestion explicite des erreurs de transition (`TransitionError`), hooks de cycle de vie (`on_enter`/`on_exit`/`on_transition`), suivi du nombre de transitions et accès direct à la machine interne.
 
 ## 🔧 Fonctionnalités
 
 - État courant unique et explicite.
-- Transition sécurisée déclenchée par un événement via `dispatch` (retournant un `Result`).
+- Transition sécurisée déclenchée par un événement via `dispatch` (retournant un `Result` avec attribut `#[must_use]`).
 - Réinitialisation de la machine avec `reset`.
 - Vérification rapide de l'état avec `is_in_state`.
 - Suivi du nombre total de transitions réussies avec `transition_count`.
-- Hooks d'entrée/sortie pour chaque changement d'état.
+- Hooks d'entrée, de sortie et de traçabilité pour chaque changement d'état.
 - Accès sécurisé à la machine interne via `machine()` et `machine_mut()`.
 
 ## 📦 Installation
@@ -39,12 +39,13 @@ Ajoutez le crate au fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
-embedded-fsm = "0.5"
-```     
+embedded-fsm = "0.6"
+```  
+
 
 ## 🚀 Exemple rapide
 
-```rust
+```Rust
 
 use embedded_fsm::{Fsm, StateMachine, TransitionError};
 
@@ -102,15 +103,14 @@ fn main() {
     assert_eq!(fsm.dispatch(Evenement::BoutonPresse), Err(TransitionError::InvalidTransition));
 }
 
-```
-
+``̀  
 ## 🧩 Modèle de conception
 
 `StateMachine` définit :
 
 * L'état initial (`initial_state`).
 * La logique de transition avec gestion explicite des erreurs (`TransitionError`).
-* Les hooks optionnels de cycle de vie (`on_enter` et `on_exit`).
+* Les hooks optionnels de cycle de vie (`on_enter`, `on_exit` et `on_transition`).
 
 `Fsm` conserve l'état courant et applique les transitions de façon strictement déterministe :
 
