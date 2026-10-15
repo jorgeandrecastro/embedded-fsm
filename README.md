@@ -1,41 +1,43 @@
 # embedded-fsm
 
 <div align="center">
-  <img src="https://img.shields.io/badge/Rust-2021-orange?logo=rust" alt="Rust 2021" />
+  <img src="https://img.shields.io/badge/Rust-2024-orange?logo=rust" alt="Rust 2024" />
   <img src="https://img.shields.io/badge/no__std-yes-success" alt="no_std" />
   <img src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue" alt="GPL-2.0-or-later" />
+  <img src="https://img.shields.io/badge/docs-rs-blue?logo=rust" alt="documentation" />
 </div>
 
 Machine à états finis (FSM) légère, synchrone et sans allocation pour les systèmes embarqués et les applications à ressources limitées.
 
 > `embedded-fsm` est conçu pour être déterministe, sûr et compatible `no_std`, sans dépendance d'allocateur et sans `unsafe`.
 
-## Pourquoi cette crate ?
+## ✨ Pourquoi cette crate ?
 
-- Minimaliste : très peu de code, très peu de surface d'API.
-- Sans allocation : idéale pour les microcontrôleurs et les environnements stricts.
-- Sûre par conception : interdiction explicite de `unsafe`.
-- Déterministe : les transitions sont entièrement pilotées par votre logique métier.
-- Flexible : hooks `on_enter` et `on_exit` pour gérer les effets de bord d'état.
+- 🚀 Ultra légère : conception minimale, idéale pour les microcontrôleurs.
+- 🧠 Déterministe : chaque transition suit une logique explicite et reproductible.
+- 🛡️ Sûre par conception : interdiction explicite de `unsafe`.
+- ♻️ Sans allocation : compatible avec les environnements les plus stricts.
+- 🔌 Flexible : hooks `on_enter` et `on_exit`, accès à la machine interne, gestion simple des effets de bord.
 
-## Fonctionnalités
+## 🔧 Fonctionnalités
 
-- Gestion d'un état courant unique et explicite.
-- Transition déclenchée par un événement (`dispatch`).
-- Réinitialisation de la machine (`reset`).
-- Vérification rapide de l'état (`is_in_state`).
-- Support d'actions d'entrée et de sortie à chaque changement d'état.
+- État courant unique et explicite.
+- Transition déclenchée par un événement via `dispatch`.
+- Réinitialisation de la machine avec `reset`.
+- Vérification rapide de l'état avec `is_in_state`.
+- Hooks d'entrée/sortie pour chaque changement d'état.
+- Accès sécurisé à la machine interne via `machine()` et `machine_mut()`.
 
-## Installation
+## 📦 Installation
 
-Ajoutez le crate au fichier `Cargo.toml` :
+Ajoutez le crate dans votre fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
-embedded-fsm = "0.2"
+embedded-fsm = "0.3"
 ```
 
-## Exemple rapide
+## 🚀 Exemple rapide
 
 ```rust
 use embedded_fsm::{Fsm, StateMachine};
@@ -52,7 +54,9 @@ enum Evenement {
     Timeout,
 }
 
-struct MaMachine;
+struct MaMachine {
+    compteur_activations: u32,
+}
 
 impl StateMachine for MaMachine {
     type State = Etat;
@@ -64,7 +68,10 @@ impl StateMachine for MaMachine {
 
     fn step(&mut self, current: Self::State, event: Self::Event) -> Self::State {
         match (current, event) {
-            (Etat::Veille, Evenement::BoutonPresse) => Etat::Actif,
+            (Etat::Veille, Evenement::BoutonPresse) => {
+                self.compteur_activations += 1;
+                Etat::Actif
+            }
             (Etat::Actif, Evenement::Timeout) => Etat::Veille,
             _ => current,
         }
@@ -72,17 +79,19 @@ impl StateMachine for MaMachine {
 }
 
 fn main() {
-    let mut fsm = Fsm::new(MaMachine);
+    let machine = MaMachine { compteur_activations: 0 };
+    let mut fsm = Fsm::new(machine);
+
     assert_eq!(fsm.state(), Etat::Veille);
 
     fsm.dispatch(Evenement::BoutonPresse);
     assert_eq!(fsm.state(), Etat::Actif);
-
     assert!(fsm.is_in_state(Etat::Actif));
+    assert_eq!(fsm.machine().compteur_activations, 1);
 }
 ```
 
-## Modèle de conception
+## 🧩 Modèle de conception
 
 `StateMachine` définit :
 
@@ -90,13 +99,19 @@ fn main() {
 - la logique de transition,
 - les hooks optionnels `on_enter` et `on_exit`.
 
-`Fsm` conserve l'état courant et applique les transitions de façon déterministe.
+`Fsm` conserve l'état courant et applique les transitions de façon déterministe :
 
-- `dispatch` : traite un événement et passe dans le nouvel état si nécessaire.
-- `is_in_state` : vérifie immédiatement l'état courant.
+- `dispatch` : traite un événement et passe dans un nouvel état si nécessaire,
+- `is_in_state` : vérifie immédiatement l'état courant,
+- `machine` / `machine_mut` : accèdent aux données internes de la machine,
 - `reset` : réinitialise la machine à son état initial.
 
-## Licence
+## 📚 Documentation
+
+- Documentation Rust : https://docs.rs/embedded-fsm
+- Dépôt GitHub : https://github.com/jorgeandrecastro/embedded-fsm
+
+## ⚖️ Licence
 
 Ce projet est distribué sous la licence GPL-2.0-or-later.
 

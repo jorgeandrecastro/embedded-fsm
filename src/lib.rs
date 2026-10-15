@@ -42,8 +42,11 @@
 //!
 //! let mut fsm = Fsm::new(MaMachine);
 //! assert_eq!(fsm.state(), Etat::Veille);
+//! assert!(fsm.is_in_state(Etat::Veille));
+//! 
 //! fsm.dispatch(Evenement::BoutonPressé);
 //! assert_eq!(fsm.state(), Etat::Actif);
+//! assert!(fsm.is_in_state(Etat::Actif));
 //! ```
 
 #![no_std]
@@ -118,6 +121,15 @@ impl<M: StateMachine> Fsm<M> {
         let state = M::initial_state();
         machine.on_enter(state); // Notifie l'entrée dans l'état initial
         Self { state, machine }
+    }
+    /// Retourne une référence mutable vers la machine interne.
+    pub fn machine_mut(&mut self) -> &mut M {
+        &mut self.machine
+    }
+
+    /// Retourne une référence immuable vers la machine interne.
+    pub fn machine(&self) -> &M {
+        &self.machine
     }
 }
 
