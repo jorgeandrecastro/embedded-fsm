@@ -1,7 +1,17 @@
+<div align="center">
 
-# embedded-fsm
+# `embedded-fsm`
 
 **Machine à états finis légère, déterministe et sans allocation pour les systèmes embarqués.**
+
+[![Rust 2024](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
+[![no_std](https://img.shields.io/badge/no__std-supported-success)](https://docs.rust-embedded.org/book/intro/no-std.html)
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+[![Documentation](https://docs.rs/embedded-fsm/badge.svg)](https://docs.rs/embedded-fsm)
+
+</div>
+
+---
 
 `embedded-fsm` est une machine à états finis (FSM) déterministe et sans allocation, conçue pour les systèmes embarqués à ressources limitées. Elle prend en charge les environnements `no_std`, interdit le code `unsafe` et fournit une gestion explicite des erreurs de transition.
 
@@ -14,19 +24,17 @@
 - **Hooks de cycle de vie :** prend en charge `on_enter`, `on_exit` et `on_transition`.
 - **Gestion explicite des erreurs :** les transitions invalides renvoient une erreur `TransitionError`.
 - **Exécution observable :** comptabilise les transitions réussies et expose l'état courant de la machine.
-- **Protection contre les boucles infinies :** paramètre générique constant configurable (`MAX_CHAINED`) pour limiter les cascades de transitions et prévenir les boucles infinies.
 
 ## 🔧 Fonctionnalités
 
 - Gestion explicite de l'état courant.
-- Transitions pilotées par des événements via `dispatch`.
+- Transitions pilotées par des événements via `dispatch` (un appel = au maximum une transition).
 - Résultats de transition typés à l'aide de `Result`.
 - Réinitialisation de la machine via `reset`.
 - Vérification de l'état courant via `is_in_state`.
-- Comptage des transitions réussies via `transition_count`.
+- Comptage sécurisé des transitions réussies via `transition_count` (avec protection anti-débordement `saturating_add`).
 - Hooks de cycle de vie lors de l'entrée dans un état, de la sortie d'un état et des transitions.
 - Accès à la machine sous-jacente via `machine()` et `machine_mut()`.
-- Limite de sécurité définie à la compilation via `const MAX_CHAINED`.
 
 ## 📦 Installation
 
@@ -34,7 +42,7 @@ Ajoutez la dépendance à votre fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
-embedded-fsm = "0.7"
+embedded-fsm = "0.8"
 ```
 
 ## 🚀 Démarrage rapide
@@ -90,7 +98,7 @@ fn main() {
         activation_count: 0,
     };
 
-    let mut fsm: Fsm<MyMachine> = Fsm::new(machine);
+    let mut fsm = Fsm::new(machine);
 
     assert_eq!(fsm.state(), State::Idle);
     assert_eq!(fsm.transition_count(), 0);
@@ -112,22 +120,24 @@ fn main() {
 
 ## 🧩 Architecture
 
-La bibliothèque sépare la logique de transition de la machine à états de son moteur d'exécution.
+La bibliothèque sépare la logique de transition de la machine à états de son
+moteur d'exécution.
 
 ### `StateMachine`
 
 Définit le comportement de la machine :
 
-- `initial_state()` — définit l'état initial.
-- `step()` — évalue un événement et détermine l'état suivant.
-- `on_enter`, `on_exit` et `on_transition` — fournissent des hooks de cycle de vie lorsqu'ils sont implémentés par le trait.
+- `initial_state()` définit l'état initial.
+- `step()` évalue un événement et détermine l'état suivant.
+- `on_enter`, `on_exit` et `on_transition` fournissent des hooks de cycle de vie
+  optionnels.
 
 ### `Fsm`
 
 Gère l'exécution et expose les opérations suivantes :
 
 | Méthode | Description |
-|---|---|
+| --- | --- |
 | `dispatch(event)` | Traite un événement et renvoie le résultat de la transition. |
 | `state()` | Renvoie l'état courant. |
 | `is_in_state(state)` | Vérifie si la machine se trouve dans un état donné. |
@@ -144,20 +154,24 @@ Gère l'exécution et expose les opérations suivantes :
 - Gérer explicitement les transitions invalides.
 - Minimiser la surcharge à l'exécution pour les applications embarquées.
 
-> **Périmètre :** ces propriétés de conception favorisent le développement de systèmes embarqués soumis à des exigences de sûreté. Elles ne démontrent toutefois pas, à elles seules, la conformité à une norme ISO et ne constituent pas une certification pour les systèmes critiques.
+> **Périmètre :** ces propriétés de conception favorisent le développement de
+> systèmes embarqués soumis à des exigences de sûreté. Elles ne démontrent
+> toutefois pas, à elles seules, la conformité à une norme ISO et ne constituent
+> pas une certification pour les systèmes critiques.
 
 ## 📚 Documentation et code source
 
-- **Documentation de l'API :** [docs.rs/embedded-fsm](https://docs.rs/embedded-fsm)
-- **Dépôt GitHub :** [github.com/jorgeandrecastro/embedded-fsm](https://github.com/jorgeandrecastro/embedded-fsm)
-- **Livre Rust Embedded :** [docs.rust-embedded.org/book](https://docs.rust-embedded.org/book/)
+- [Documentation de l'API](https://docs.rs/embedded-fsm)
+- [Dépôt GitHub](https://github.com/jorgeandrecastro/embedded-fsm)
+- [Livre Rust Embedded](https://docs.rust-embedded.org/book/)
 
 ## 📝 Changelog
 
-Pour consulter l'historique détaillé de toutes les modifications, reportez-vous au fichier [CHANGELOG.md](CHANGELOG.md).
+Pour consulter l'historique détaillé de toutes les modifications, reportez-vous
+au [fichier CHANGELOG.md](CHANGELOG.md).
 
 ## ⚖️ Licence
 
-Ce projet est distribué sous licence **GPL-2.0-or-later**.
+Ce projet est distribué sous licence GPL-2.0-or-later.
 
 Copyright (C) 2026 Jorge Andre Castro.

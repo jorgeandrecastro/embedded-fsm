@@ -5,6 +5,15 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à la [Version Sémantique](https://semver.org/spec/v2.0.html).
 
+## [0.8.0] - 2026-02-21
+
+### Modifié
+- **Simplification du modèle de transition :** Refactorisation de `Fsm::dispatch` pour garantir un comportement strict de type "un appel, au maximum une transition", éliminant les ambiguïtés liées au chaînage implicite.
+- Suppression du paramètre générique constant `MAX_CHAINED` de la structure `Fsm` pour épurer l'API publique.
+- Suppression de la variante d'erreur `TransitionError::InfiniteLoopDetected` devenue superflue.
+- Utilisation de `saturating_add` pour le comptage des transitions afin d'éviter tout débordement du compteur (`u32`).
+- Nettoyage et mise à jour de la suite de tests et de la documentation.
+
 ## [0.7.0] - 2026-02-21
 
 ### Ajouté

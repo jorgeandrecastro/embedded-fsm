@@ -60,8 +60,6 @@
 pub enum TransitionError {
     /// La transition demandée n'est pas autorisée par la logique métier.
     InvalidTransition,
-    /// Erreur de sécurité : détection d'une boucle infinie de transitions.
-    InfiniteLoopDetected,
 }
 
 /// Trait définissant le comportement d'une machine à états finis.
@@ -96,13 +94,13 @@ pub trait StateMachine {
 }
 
 /// Gestionnaire générique de FSM (zéro allocation, zéro coût d'abstraction).
-pub struct Fsm<M: StateMachine, const MAX_CHAINED: u32 = 10> {
+pub struct Fsm<M: StateMachine> {
     state: M::State,
     machine: M,
     transition_count: u32,
 }
 
-impl<M: StateMachine, const MAX_CHAINED: u32> Fsm<M, MAX_CHAINED> {
+impl<M: StateMachine> Fsm<M> {
     /// Retourne l'état actuel de la machine.
     pub fn state(&self) -> M::State {
         self.state
@@ -151,32 +149,41 @@ impl<M: StateMachine, const MAX_CHAINED: u32> Fsm<M, MAX_CHAINED> {
         self.transition_count
     }
 
-    /// Envoie un événement, calcule le nouvel état de manière sécurisée et gère les hooks.
-    #[must_use = "Le résultat de la transition doit être vérifié pour garantir la sécurité du système"]
-    pub fn dispatch(&mut self, event: M::Event) -> Result<Option<M::Action>, TransitionError>
+    /// Traite un événement et effectue au maximum une transition.
+    ///
+    /// Chaque appel à `dispatch` exécute un seul `step`.
+    /// Aucune transition en cascade n'est exécutée implicitement.
+    #[must_use = "Le résultat de la transition doit être vérifié"]
+    pub fn dispatch(
+        &mut self,
+        event: M::Event,
+    ) -> Result<Option<M::Action>, TransitionError>
     where
         M::Event: Clone,
     {
-        let event_clone = event.clone();
-        let (next_state, action) = self.machine.step(self.state, event)?;
-        if next_state != self.state {
-            if MAX_CHAINED == 0 {
-                return Err(TransitionError::InfiniteLoopDetected);
-            }
+        let event_for_hook = event.clone();
 
+        // Calcule la transition sans modifier l'état courant.
+        let (next_state, action) = self.machine.step(self.state, event)?;
+
+        // Une transition n'est nécessaire que si l'état change.
+        if next_state != self.state {
             let old_state = self.state;
 
             self.machine.on_exit(old_state);
-            self.state = next_state;
-            self.transition_count += 1;
 
-            self.machine.on_transition(old_state, &event_clone, self.state);
-            self.machine.on_enter(self.state);
+            self.state = next_state;
+            self.transition_count = self.transition_count.saturating_add(1);
+
+            self.machine
+                .on_transition(old_state, &event_for_hook, next_state);
+
+            self.machine.on_enter(next_state);
         }
+
         Ok(action)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_fsm_transitions() {
-        let mut fsm: Fsm<TestMachine> = Fsm::new(TestMachine);
+        let mut fsm = Fsm::new(TestMachine);
         assert_eq!(fsm.state(), TestState::Off);
         assert_eq!(fsm.transition_count(), 0);
 
@@ -272,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_is_in_state() {
-        let mut fsm: Fsm<TestMachine> = Fsm::new(TestMachine);
+        let mut fsm = Fsm::new(TestMachine);
         assert!(fsm.is_in_state(TestState::Off));
         assert!(!fsm.is_in_state(TestState::On));
 
@@ -286,7 +293,7 @@ mod tests {
             enter_count: 0,
             exit_count: 0,
         };
-        let mut fsm: Fsm<TestMachineWithHooks> = Fsm::new(machine);
+        let mut fsm = Fsm::new(machine);
 
         assert_eq!(fsm.machine().enter_count, 1);
         assert_eq!(fsm.machine().exit_count, 0);
@@ -300,32 +307,5 @@ mod tests {
         assert_eq!(fsm.state(), TestState::Off);
         assert_eq!(fsm.machine().enter_count, 3);
         assert_eq!(fsm.machine().exit_count, 2);
-    }
-    
-    #[test]
-    fn test_infinite_loop_protection() {
-        struct InfiniteMachine;
-
-        impl StateMachine for InfiniteMachine {
-            type State = TestState;
-            type Event = TestEvent;
-            type Action = ();
-
-            fn initial_state() -> Self::State {
-                TestState::Off
-            }
-
-            fn step(
-                &mut self,
-                _current: Self::State,
-                _event: Self::Event,
-            ) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
-                Ok((TestState::On, None))
-            }
-        }
-
-        let mut fsm = Fsm::<_, 0>::new(InfiniteMachine);
-        let res = fsm.dispatch(TestEvent::Toggle);
-        assert_eq!(res, Err(TransitionError::InfiniteLoopDetected));
     }
 }
