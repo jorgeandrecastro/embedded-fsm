@@ -1,51 +1,43 @@
- <div align="center">
 
-# `embedded-fsm`
+# embedded-fsm
 
-**Lightweight, deterministic, allocation-free finite state machine for embedded systems.**
+**Machine à états finis légère, déterministe et sans allocation pour les systèmes embarqués.**
 
-[![Rust 2021](https://img.shields.io/badge/Rust-2021-orange?logo=rust)](https://www.rust-lang.org/)
-[![no_std](https://img.shields.io/badge/no__std-supported-success)](https://docs.rust-embedded.org/book/intro/no-std.html)
-[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
-[![Documentation](https://docs.rs/embedded-fsm/badge.svg)](https://docs.rs/embedded-fsm)
+`embedded-fsm` est une machine à états finis (FSM) déterministe et sans allocation, conçue pour les systèmes embarqués à ressources limitées. Elle prend en charge les environnements `no_std`, interdit le code `unsafe` et fournit une gestion explicite des erreurs de transition.
 
-</div>
+## ✨ Pourquoi embedded-fsm ?
 
----
+- **Légère :** implémentation minimale adaptée aux microcontrôleurs.
+- **Déterministe :** transitions d'état explicites et reproductibles.
+- **Économe en mémoire :** aucune allocation sur le tas (*heap*).
+- **Orientée sûreté :** interdit le code `unsafe`.
+- **Hooks de cycle de vie :** prend en charge `on_enter`, `on_exit` et `on_transition`.
+- **Gestion explicite des erreurs :** les transitions invalides renvoient une erreur `TransitionError`.
+- **Exécution observable :** comptabilise les transitions réussies et expose l'état courant de la machine.
+- **Protection contre les boucles infinies :** paramètre générique constant configurable (`MAX_CHAINED`) pour limiter les cascades de transitions et prévenir les boucles infinies.
 
-`embedded-fsm` is a deterministic, allocation-free finite state machine (FSM) designed for resource-constrained embedded systems. It supports `no_std` environments, forbids `unsafe` code, and provides explicit transition error handling.
+## 🔧 Fonctionnalités
 
-## ✨ Why embedded-fsm?
-
-- **Lightweight:** minimal implementation suitable for microcontrollers.
-- **Deterministic:** explicit, reproducible state transitions.
-- **Memory-efficient:** no heap allocation required.
-- **Safety-oriented:** forbids `unsafe` code.
-- **Lifecycle hooks:** supports `on_enter`, `on_exit`, and `on_transition`.
-- **Explicit error handling:** invalid transitions return `TransitionError`.
-- **Observable execution:** tracks successful transitions and exposes machine state.
-
-## 🔧 Features
-
-- Explicit current state.
-- Event-driven transitions through `dispatch`.
-- Typed transition results using `Result`.
-- Machine reset through `reset`.
-- Current-state inspection through `is_in_state`.
-- Successful transition counting through `transition_count`.
-- Lifecycle hooks for state entry, exit, and transitions.
-- Access to the underlying state machine through `machine()` and `machine_mut()`.
+- Gestion explicite de l'état courant.
+- Transitions pilotées par des événements via `dispatch`.
+- Résultats de transition typés à l'aide de `Result`.
+- Réinitialisation de la machine via `reset`.
+- Vérification de l'état courant via `is_in_state`.
+- Comptage des transitions réussies via `transition_count`.
+- Hooks de cycle de vie lors de l'entrée dans un état, de la sortie d'un état et des transitions.
+- Accès à la machine sous-jacente via `machine()` et `machine_mut()`.
+- Limite de sécurité définie à la compilation via `const MAX_CHAINED`.
 
 ## 📦 Installation
 
-Add the crate to your `Cargo.toml`:
+Ajoutez la dépendance à votre fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
-embedded-fsm = "0.6"
+embedded-fsm = "0.7"
 ```
 
-## 🚀 Quick start
+## 🚀 Démarrage rapide
 
 ```rust
 use embedded_fsm::{Fsm, StateMachine, TransitionError};
@@ -98,7 +90,7 @@ fn main() {
         activation_count: 0,
     };
 
-    let mut fsm = Fsm::new(machine);
+    let mut fsm: Fsm<MyMachine> = Fsm::new(machine);
 
     assert_eq!(fsm.state(), State::Idle);
     assert_eq!(fsm.transition_count(), 0);
@@ -110,7 +102,7 @@ fn main() {
     assert_eq!(fsm.transition_count(), 1);
     assert_eq!(fsm.machine().activation_count, 1);
 
-    // Invalid transitions are rejected explicitly.
+    // Les transitions invalides sont explicitement rejetées.
     assert_eq!(
         fsm.dispatch(Event::ButtonPressed),
         Err(TransitionError::InvalidTransition)
@@ -118,50 +110,54 @@ fn main() {
 }
 ```
 
-## 🧩 Design
+## 🧩 Architecture
 
-The crate separates the state machine's transition logic from the FSM runtime.
+La bibliothèque sépare la logique de transition de la machine à états de son moteur d'exécution.
 
 ### `StateMachine`
 
-Defines the machine's behavior:
+Définit le comportement de la machine :
 
-- `initial_state()` — specifies the initial state.
-- `step()` — evaluates an event and determines the next state.
-- `on_enter`, `on_exit`, and `on_transition` — provide lifecycle hooks when implemented by the trait.
+- `initial_state()` — définit l'état initial.
+- `step()` — évalue un événement et détermine l'état suivant.
+- `on_enter`, `on_exit` et `on_transition` — fournissent des hooks de cycle de vie lorsqu'ils sont implémentés par le trait.
 
 ### `Fsm`
 
-Manages execution and exposes the following operations:
+Gère l'exécution et expose les opérations suivantes :
 
-| Method | Purpose |
+| Méthode | Description |
 |---|---|
-| `dispatch(event)` | Processes an event and returns a transition result. |
-| `state()` | Returns the current state. |
-| `is_in_state(state)` | Checks whether the machine is in a given state. |
-| `transition_count()` | Returns the number of successful transitions. |
-| `machine()` | Provides shared access to the underlying machine. |
-| `machine_mut()` | Provides mutable access to the underlying machine. |
-| `reset()` | Resets the FSM to its initial state. |
+| `dispatch(event)` | Traite un événement et renvoie le résultat de la transition. |
+| `state()` | Renvoie l'état courant. |
+| `is_in_state(state)` | Vérifie si la machine se trouve dans un état donné. |
+| `transition_count()` | Renvoie le nombre de transitions réussies. |
+| `machine()` | Fournit un accès en lecture à la machine sous-jacente. |
+| `machine_mut()` | Fournit un accès mutable à la machine sous-jacente. |
+| `reset()` | Réinitialise la FSM à son état initial. |
 
-## 🎯 Design goals
+## 🎯 Objectifs de conception
 
-- Predictable state-transition behavior.
-- No heap allocation.
-- Compatibility with `no_std` environments.
-- Explicit handling of invalid transitions.
-- Minimal runtime overhead for embedded applications.
+- Garantir un comportement prévisible des transitions d'état.
+- Éviter toute allocation sur le tas.
+- Assurer la compatibilité avec les environnements `no_std`.
+- Gérer explicitement les transitions invalides.
+- Minimiser la surcharge à l'exécution pour les applications embarquées.
 
-> **Scope:** These design properties support safety-oriented embedded development, but do not independently establish ISO compliance or certify the crate for safety-critical use.
+> **Périmètre :** ces propriétés de conception favorisent le développement de systèmes embarqués soumis à des exigences de sûreté. Elles ne démontrent toutefois pas, à elles seules, la conformité à une norme ISO et ne constituent pas une certification pour les systèmes critiques.
 
-## 📚 Documentation and source
+## 📚 Documentation et code source
 
-- **API documentation:** https://docs.rs/embedded-fsm
-- **GitHub repository:** https://github.com/jorgeandrecastro/embedded-fsm
-- **Rust Embedded Book:** https://docs.rust-embedded.org/book/
+- **Documentation de l'API :** [docs.rs/embedded-fsm](https://docs.rs/embedded-fsm)
+- **Dépôt GitHub :** [github.com/jorgeandrecastro/embedded-fsm](https://github.com/jorgeandrecastro/embedded-fsm)
+- **Livre Rust Embedded :** [docs.rust-embedded.org/book](https://docs.rust-embedded.org/book/)
 
-## ⚖️ License
+## 📝 Changelog
 
-This project is distributed under the **GPL-2.0-or-later** license.
+Pour consulter l'historique détaillé de toutes les modifications, reportez-vous au fichier [CHANGELOG.md](CHANGELOG.md).
+
+## ⚖️ Licence
+
+Ce projet est distribué sous licence **GPL-2.0-or-later**.
 
 Copyright (C) 2026 Jorge Andre Castro.

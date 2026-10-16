@@ -41,7 +41,7 @@
 //!     }
 //! }
 //!
-//! let mut fsm = Fsm::new(MaMachine);
+//! let mut fsm: Fsm<MaMachine> = Fsm::new(MaMachine);
 //! assert_eq!(fsm.state(), Etat::Veille);
 //! assert!(fsm.is_in_state(Etat::Veille));
 //!
@@ -60,6 +60,8 @@
 pub enum TransitionError {
     /// La transition demandée n'est pas autorisée par la logique métier.
     InvalidTransition,
+    /// Erreur de sécurité : détection d'une boucle infinie de transitions.
+    InfiniteLoopDetected,
 }
 
 /// Trait définissant le comportement d'une machine à états finis.
@@ -79,7 +81,7 @@ pub trait StateMachine {
     /// Calcule le nouvel état et l'action optionnelle associée, ou retourne une erreur.
     fn step(
         &mut self,
-        current: Self::State,
+        _current: Self::State,
         event: Self::Event,
     ) -> Result<(Self::State, Option<Self::Action>), TransitionError>;
 
@@ -94,13 +96,13 @@ pub trait StateMachine {
 }
 
 /// Gestionnaire générique de FSM (zéro allocation, zéro coût d'abstraction).
-pub struct Fsm<M: StateMachine> {
+pub struct Fsm<M: StateMachine, const MAX_CHAINED: u32 = 10> {
     state: M::State,
     machine: M,
     transition_count: u32,
 }
 
-impl<M: StateMachine> Fsm<M> {
+impl<M: StateMachine, const MAX_CHAINED: u32> Fsm<M, MAX_CHAINED> {
     /// Retourne l'état actuel de la machine.
     pub fn state(&self) -> M::State {
         self.state
@@ -153,20 +155,23 @@ impl<M: StateMachine> Fsm<M> {
     #[must_use = "Le résultat de la transition doit être vérifié pour garantir la sécurité du système"]
     pub fn dispatch(&mut self, event: M::Event) -> Result<Option<M::Action>, TransitionError>
     where
-        M::Event: Clone, // <--- On exige Clone pour pouvoir le réutiliser dans on_transition
+        M::Event: Clone,
     {
-        let event_clone = event.clone(); // <--- On clone l'événement avant qu'il ne soit déplacé
+        let event_clone = event.clone();
         let (next_state, action) = self.machine.step(self.state, event)?;
         if next_state != self.state {
+            if MAX_CHAINED == 0 {
+                return Err(TransitionError::InfiniteLoopDetected);
+            }
+
             let old_state = self.state;
+
             self.machine.on_exit(old_state);
             self.state = next_state;
-            self.machine.on_enter(self.state);
             self.transition_count += 1;
 
-            // On utilise la copie pour la traçabilité
-            self.machine
-                .on_transition(old_state, &event_clone, self.state);
+            self.machine.on_transition(old_state, &event_clone, self.state);
+            self.machine.on_enter(self.state);
         }
         Ok(action)
     }
@@ -201,10 +206,10 @@ mod tests {
 
         fn step(
             &mut self,
-            current: Self::State,
+            _current: Self::State,
             event: Self::Event,
         ) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
-            match (current, event) {
+            match (_current, event) {
                 (TestState::Off, TestEvent::Toggle) => Ok((TestState::On, None)),
                 (TestState::On, TestEvent::Toggle) => Ok((TestState::Off, None)),
                 _ => Err(TransitionError::InvalidTransition),
@@ -228,10 +233,10 @@ mod tests {
 
         fn step(
             &mut self,
-            current: Self::State,
+            _current: Self::State,
             event: Self::Event,
         ) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
-            match (current, event) {
+            match (_current, event) {
                 (TestState::Off, TestEvent::Toggle) => Ok((TestState::On, None)),
                 (TestState::On, TestEvent::Toggle) => Ok((TestState::Off, None)),
                 _ => Err(TransitionError::InvalidTransition),
@@ -249,7 +254,7 @@ mod tests {
 
     #[test]
     fn test_fsm_transitions() {
-        let mut fsm = Fsm::new(TestMachine);
+        let mut fsm: Fsm<TestMachine> = Fsm::new(TestMachine);
         assert_eq!(fsm.state(), TestState::Off);
         assert_eq!(fsm.transition_count(), 0);
 
@@ -267,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_is_in_state() {
-        let mut fsm = Fsm::new(TestMachine);
+        let mut fsm: Fsm<TestMachine> = Fsm::new(TestMachine);
         assert!(fsm.is_in_state(TestState::Off));
         assert!(!fsm.is_in_state(TestState::On));
 
@@ -281,7 +286,7 @@ mod tests {
             enter_count: 0,
             exit_count: 0,
         };
-        let mut fsm = Fsm::new(machine);
+        let mut fsm: Fsm<TestMachineWithHooks> = Fsm::new(machine);
 
         assert_eq!(fsm.machine().enter_count, 1);
         assert_eq!(fsm.machine().exit_count, 0);
@@ -295,5 +300,32 @@ mod tests {
         assert_eq!(fsm.state(), TestState::Off);
         assert_eq!(fsm.machine().enter_count, 3);
         assert_eq!(fsm.machine().exit_count, 2);
+    }
+    
+    #[test]
+    fn test_infinite_loop_protection() {
+        struct InfiniteMachine;
+
+        impl StateMachine for InfiniteMachine {
+            type State = TestState;
+            type Event = TestEvent;
+            type Action = ();
+
+            fn initial_state() -> Self::State {
+                TestState::Off
+            }
+
+            fn step(
+                &mut self,
+                _current: Self::State,
+                _event: Self::Event,
+            ) -> Result<(Self::State, Option<Self::Action>), TransitionError> {
+                Ok((TestState::On, None))
+            }
+        }
+
+        let mut fsm = Fsm::<_, 0>::new(InfiniteMachine);
+        let res = fsm.dispatch(TestEvent::Toggle);
+        assert_eq!(res, Err(TransitionError::InfiniteLoopDetected));
     }
 }
