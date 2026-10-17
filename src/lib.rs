@@ -91,6 +91,12 @@ pub trait StateMachine {
 
     /// Hook optionnel appelé à chaque transition réussie pour la traçabilité.
     fn on_transition(&mut self, _from: Self::State, _event: &Self::Event, _to: Self::State) {}
+
+    /// Gère les événements globaux ou jokers depuis n'importe quel état.
+    /// Retourne `Some(next_state)` si l'événement est global, ou `None` pour retomber sur le `step` classique.
+    fn global_step(&mut self, _current: Self::State, _event: &Self::Event) -> Option<Self::State> {
+        None
+    }
 }
 
 /// Gestionnaire générique de FSM (zéro allocation, zéro coût d'abstraction).
@@ -163,10 +169,15 @@ impl<M: StateMachine> Fsm<M> {
     {
         let event_for_hook = event.clone();
 
-        // Calcule la transition sans modifier l'état courant.
-        let (next_state, action) = self.machine.step(self.state, event)?;
+        // 1. Vérifie d'abord s'il s'agit d'un événement global ou joker
+        let (next_state, action) = if let Some(global_next) = self.machine.global_step(self.state, &event) {
+            (global_next, None)
+        } else {
+            // 2. Sinon, on utilise la logique métier standard `step`
+            self.machine.step(self.state, event)?
+        };
 
-        // Une transition n'est nécessaire que si l'état change.
+        // Si une transition explicite se produit
         if next_state != self.state {
             let old_state = self.state;
 
@@ -184,6 +195,7 @@ impl<M: StateMachine> Fsm<M> {
         Ok(action)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,11 +204,13 @@ mod tests {
     enum TestState {
         Off,
         On,
+        Emergency,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum TestEvent {
         Toggle,
+        EmergencyStop,
         InvalidEvent,
     }
 
@@ -220,6 +234,14 @@ mod tests {
                 (TestState::Off, TestEvent::Toggle) => Ok((TestState::On, None)),
                 (TestState::On, TestEvent::Toggle) => Ok((TestState::Off, None)),
                 _ => Err(TransitionError::InvalidTransition),
+            }
+        }
+
+        // Implémentation du test pour les transitions globales
+        fn global_step(&mut self, _current: Self::State, event: &Self::Event) -> Option<Self::State> {
+            match event {
+                TestEvent::EmergencyStop => Some(TestState::Emergency),
+                _ => None,
             }
         }
     }
@@ -307,5 +329,19 @@ mod tests {
         assert_eq!(fsm.state(), TestState::Off);
         assert_eq!(fsm.machine().enter_count, 3);
         assert_eq!(fsm.machine().exit_count, 2);
+    }
+
+    #[test]
+    fn test_global_step() {
+        let mut fsm = Fsm::new(TestMachine);
+        assert_eq!(fsm.state(), TestState::Off);
+
+        // On passe d'abord la machine à l'état "On"
+        let _ = fsm.dispatch(TestEvent::Toggle);
+        assert_eq!(fsm.state(), TestState::On);
+
+        // Déclenchement de l'événement global d'urgence depuis l'état "On"
+        assert!(fsm.dispatch(TestEvent::EmergencyStop).is_ok());
+        assert_eq!(fsm.state(), TestState::Emergency);
     }
 }

@@ -24,6 +24,7 @@
 - **Hooks de cycle de vie :** prend en charge `on_enter`, `on_exit` et `on_transition`.
 - **Gestion explicite des erreurs :** les transitions invalides renvoient une erreur `TransitionError`.
 - **Exécution observable :** comptabilise les transitions réussies et expose l'état courant de la machine.
+- **Transitions globales :** prise en charge des événements universels ou d'urgence via global_step depuis n'importe quel état.
 
 ## 🔧 Fonctionnalités
 
@@ -42,7 +43,7 @@ Ajoutez la dépendance à votre fichier `Cargo.toml` :
 
 ```toml
 [dependencies]
-embedded-fsm = "0.8"
+embedded-fsm = "0.9"
 ```
 
 ## 🚀 Démarrage rapide
@@ -131,6 +132,7 @@ Définit le comportement de la machine :
 - `step()` évalue un événement et détermine l'état suivant.
 - `on_enter`, `on_exit` et `on_transition` fournissent des hooks de cycle de vie
   optionnels.
+- `global_step()`:  intercepte les événements globaux depuis n'importe quel état (optionnel).
 
 ### `Fsm`
 

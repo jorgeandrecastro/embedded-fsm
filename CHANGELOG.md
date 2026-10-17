@@ -5,6 +5,12 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à la [Version Sémantique](https://semver.org/spec/v2.0.html).
 
+## [0.9.0] - 2026-10-17
+
+### Ajouté
+- **Support des transitions globales / jokers (`global_step`) :** Ajout de la méthode optionnelle `global_step` au trait `StateMachine` pour intercepter les événements universels ou de haute priorité (tels qu'un arrêt d'urgence ou un reset matériel) depuis n'importe quel état courant sans alourdir la fonction `step`.
+- Ajout de tests unitaires dédiés pour valider l'interception et le comportement des événements globaux.
+
 ## [0.8.0] - 2026-02-21
 
 ### Modifié
